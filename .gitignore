@@ -1,0 +1,9 @@
+# API keys and secrets
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local data (optional, remove if you want history synced to github)
+# summary_history.json

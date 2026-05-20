@@ -1,0 +1,5 @@
+streamlit
+requests
+youtube-transcript-api
+google-generativeai
+markdowngspread
