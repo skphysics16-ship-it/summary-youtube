@@ -238,11 +238,9 @@ elif st.session_state['current_tab_state'] == "🔗 유튜브 링크":
                         video_title = get_youtube_title(url)
                         
                         try:
-                            api_instance = YouTubeTranscriptApi()
-                            transcript_list = api_instance.list(video_id)
-                            srt = transcript_list.find_transcript(['ko', 'en']).fetch()
-                        except (AttributeError, Exception):
-                            srt = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
+                            srt = YouTubeTranscriptApi().fetch(video_id, languages=['ko', 'en'])
+                        except Exception as e:
+                            raise Exception(f"자막을 가져오지 못했습니다. 상세: {e}")
                         
                         # 💡 [핵심 수정 부분] 어떤 형태의 데이터가 들어와도 에러 없이 텍스트를 추출하도록 보완
                         text_pieces = []
