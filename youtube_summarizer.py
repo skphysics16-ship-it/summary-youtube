@@ -152,8 +152,8 @@ if 'api_key' not in st.session_state:
     st.session_state['api_key'] = load_api_key()
 if 'view_record' not in st.session_state:
     st.session_state['view_record'] = None
-if 'active_tab' not in st.session_state:
-    st.session_state['active_tab'] = "🔗 유튜브 링크"
+if 'current_tab_state' not in st.session_state:
+    st.session_state['current_tab_state'] = "🔗 유튜브 링크"
 
 # 3. 사이드바 구현
 st.sidebar.title("📁 요약 기록")
@@ -161,41 +161,55 @@ st.sidebar.title("📁 요약 기록")
 history_data = load_history()
 
 if history_data:
-    categories = sorted(list(set([item['category'] for item in history_data])))
+    categories = sorted(list(set([item.get('category', '미분류') for item in history_data])))
     
     for category in categories:
         with st.sidebar.expander(f"📁 {category}", expanded=False):
-            category_records = [item for item in history_data if item['category'] == category]
+            category_records = [item for item in history_data if item.get('category', '미분류') == category]
             for idx, record in enumerate(category_records):
                 # 버튼 클릭 시 즉시 본문에 불러오기 (이후 자동 리런)
                 if st.button(f"📄 {record['title']}", key=f"hist_{record['video_id']}_{idx}", use_container_width=True):
                     st.session_state['view_record'] = record
-                    st.session_state['active_tab'] = "📄 본문 내용"
+                    st.session_state['current_tab_state'] = "📄 본문 내용"
                     st.rerun()
 else:
     st.sidebar.write("아직 저장된 요약 기록이 없습니다.")
 
+
 # 4. 메인 화면 - 탭 시스템 (라디오 버튼으로 대체하여 프로그래밍 방식의 화면 전환 지원)
 tabs = ["🔗 유튜브 링크", "📄 본문 내용", "⚙️ 설정"]
-selected_tab = st.radio("메뉴", tabs, horizontal=True, label_visibility="collapsed", key="active_tab")
 
-if selected_tab == "⚙️ 설정":
+# Determine the initial index for the radio button based on st.session_state['current_tab_state']
+try:
+    initial_tab_index = tabs.index(st.session_state['current_tab_state'])
+except ValueError:
+    initial_tab_index = 0 # Default to the first tab if the state is somehow invalid
+
+# Render st.radio without a key, and capture its return value.
+# This return value reflects the user's current selection from the radio buttons.
+user_selected_tab = st.radio("메뉴", tabs, horizontal=True, label_visibility="collapsed", index=initial_tab_index)
+
+
+# If the user manually changed the tab via the radio buttons, update st.session_state['current_tab_state']
+if user_selected_tab != st.session_state['current_tab_state']:
+    st.session_state['current_tab_state'] = user_selected_tab
+    st.rerun() # Rerun to ensure the correct tab content is displayed immediately
+
+# Now, use st.session_state['current_tab_state'] to determine which content to display.
+if st.session_state['current_tab_state'] == "⚙️ 설정":
     st.subheader("⚙️ API 및 시스템 설정")
-    st.markdown("Gemini API 키를 입력하면 `.env` 파일에 안전하게 저장되어 다음 실행 시에도 자동으로 유지됩니다.")
-    
-    st.text_input("🔑 Gemini API Key를 입력하세요:", value=st.session_state['api_key'], type="password", key="api_key_input")
-    
+    api_key_input = st.text_input("Gemini API Key를 입력하세요:", type="password", value=st.session_state['api_key'])
     if st.button("설정 저장"):
-        st.session_state['api_key'] = st.session_state['api_key_input']
-        save_api_key(st.session_state['api_key'])
-        if st.session_state['api_key']:
+        if api_key_input:
+            save_api_key(api_key_input)
+            st.session_state['api_key'] = api_key_input
             st.success("🎉 API 키가 성공적으로 저장되었습니다! 이제 '유튜브 링크' 탭을 이용하실 수 있습니다.")
         else:
             st.warning("입력된 내용이 없습니다.")
 
-elif selected_tab == "🔗 유튜브 링크":
+elif st.session_state['current_tab_state'] == "🔗 유튜브 링크":
     st.subheader("🆕 새로운 영상 요약하기")
-    
+
     if not st.session_state.get('api_key', ''):
         st.warning("⚠️ 요약을 시작하려면 먼저 상단의 **'⚙️ 설정' 탭**으로 이동하여 Gemini API Key를 입력하고 [설정 저장]을 눌러주세요.")
     else:
@@ -283,7 +297,7 @@ elif selected_tab == "🔗 유튜브 링크":
                             "url": url,
                             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         }
-                        st.session_state['active_tab'] = "📄 본문 내용"
+                        st.session_state['current_tab_state'] = "📄 본문 내용"
                         
                         st.success("🎉 요약이 완료되었습니다! '📄 본문 내용' 탭에서 결과를 확인하세요.")
                         st.rerun()
@@ -291,7 +305,7 @@ elif selected_tab == "🔗 유튜브 링크":
                     except Exception as e:
                         st.error(f"❌ 오류가 발생했습니다: {e}\n(자막이 없는 영상이거나, API 키가 올바르지 않을 수 있습니다.)")
 
-elif selected_tab == "📄 본문 내용":
+elif st.session_state['current_tab_state'] == "📄 본문 내용":
     if st.session_state.get('view_record'):
         rec = st.session_state['view_record']
         
