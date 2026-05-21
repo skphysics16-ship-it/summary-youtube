@@ -168,7 +168,7 @@ if history_data:
             category_records = [item for item in history_data if item.get('category', '미분류') == category]
             for idx, record in enumerate(category_records):
                 # 버튼 클릭 시 즉시 본문에 불러오기 (이후 자동 리런)
-                if st.button(f"📄 {record['title']}", key=f"hist_{record['video_id']}_{idx}", use_container_width=True):
+                if st.button(f"📄 {record.get('title', '제목 없음')}", key=f"hist_{record.get('video_id', 'unknown')}_{idx}", use_container_width=True):
                     st.session_state['view_record'] = record
                     st.session_state['current_tab_state'] = "📄 본문 내용"
                     st.rerun()
@@ -357,15 +357,15 @@ elif st.session_state['current_tab_state'] == "📄 본문 내용":
         </style>
         """, unsafe_allow_html=True)
 
-        st.markdown(f"# 📄 {rec['title']}")
+        st.markdown(f"# 📄 {rec.get('title', '제목 없음')}")
         
         # 메타 정보는 심플한 텍스트로 유지
-        st.markdown(f"**📌 카테고리:** `{rec['category']}` &nbsp;&nbsp;|&nbsp;&nbsp; **📅 일시:** `{rec.get('date', '기록 없음')}` &nbsp;&nbsp;|&nbsp;&nbsp; **🔗 [영상 링크]({rec['url']})**")
+        st.markdown(f"**📌 카테고리:** `{rec.get('category', '미분류')}` &nbsp;&nbsp;|&nbsp;&nbsp; **📅 일시:** `{rec.get('date', '기록 없음')}` &nbsp;&nbsp;|&nbsp;&nbsp; **🔗 [영상 링크]({rec.get('url', '#')})**")
         st.markdown("---") 
         
         # 줄바꿈 및 마크다운 처리가 명확하게 적용되도록 텍스트 후처리 (정규식 사용)
         import re
-        formatted_summary = rec['summary']
+        formatted_summary = rec.get('summary', '요약 내용이 없습니다.')
         
         # 1번 섹션(한 줄 요약) 이전에 나오는 모든 내용(영상 제목, 빈 줄 등)을 날려버려서 상단 여백 제거
         # "[영상 제목]" 이나 "## [영상 제목]" 등 어떤 형태가 오든 '🌟 한 줄 요약' 앞까지 전부 삭제 (앞에 '1. ' 이 생략되어 있거나, ** 볼드체 기호가 여러 개 있어도 동작)
@@ -393,14 +393,14 @@ elif st.session_state['current_tab_state'] == "📄 본문 내용":
         cat_col1, cat_col2 = st.columns([3, 1])
         with cat_col1:
             category_list = ["물리학", "AI & 에듀테크", "인문/교양", "뉴스/트렌드", "직접 입력"]
-            current_cat = rec['category']
+            current_cat = rec.get('category', '미분류')
             options = category_list.copy()
             if current_cat not in options and current_cat != "직접 입력":
                 options.insert(0, current_cat)
                 
-            new_cat_selection = st.selectbox("새 카테고리 선택:", options, key=f"cat_select_{rec['video_id']}")
+            new_cat_selection = st.selectbox("새 카테고리 선택:", options, key=f"cat_select_{rec.get('video_id', 'unknown')}")
             if new_cat_selection == "직접 입력":
-                new_cat_input = st.text_input("새로운 카테고리명:", key=f"cat_input_{rec['video_id']}")
+                new_cat_input = st.text_input("새로운 카테고리명:", key=f"cat_input_{rec.get('video_id', 'unknown')}")
                 new_category = new_cat_input if new_cat_input else "기타"
             else:
                 new_category = new_cat_selection
@@ -408,9 +408,9 @@ elif st.session_state['current_tab_state'] == "📄 본문 내용":
         with cat_col2:
             st.write("") # 수직 중앙 정렬용 여백
             st.write("")
-            if st.button("변경 적용", use_container_width=True, key=f"cat_btn_{rec['video_id']}"):
+            if st.button("변경 적용", use_container_width=True, key=f"cat_btn_{rec.get('video_id', 'unknown')}"):
                 if new_category != current_cat:
-                    update_category(rec['video_id'], new_category)
+                    update_category(rec.get('video_id', 'unknown'), new_category)
                     st.session_state['view_record']['category'] = new_category
                     st.success(f"카테고리가 '{new_category}'(으)로 변경되었습니다.")
                     st.rerun()
@@ -421,8 +421,8 @@ elif st.session_state['current_tab_state'] == "📄 본문 내용":
         
         st.download_button(
             label="💾 텍스트 파일로 다운로드",
-            data=rec['summary'],
-            file_name=f"{rec['title']}_요약.txt",
+            data=rec.get('summary', ''),
+            file_name=f"{rec.get('title', '제목_없음')}_요약.txt",
             mime="text/plain",
             use_container_width=True
         )
