@@ -4,3 +4,4 @@ youtube-transcript-api
 google-generativeai
 gspread
 oauth2client
+markdown

@@ -4,6 +4,8 @@ import os
 import requests
 from datetime import datetime
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import IpBlocked, RequestBlocked
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 import google.generativeai as genai
 import gspread
 
@@ -142,6 +144,55 @@ def get_youtube_title(url):
     except:
         return "유튜브 영상"
 
+def _get_secret(key):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return None
+
+def fetch_transcript(video_id, languages=['ko', 'en']):
+    """IP 차단 시 Streamlit Secrets의 프록시/쿠키로 자동 폴백합니다."""
+    # 방법 1: 직접 요청 (로컬 환경 또는 차단 없는 경우)
+    try:
+        return YouTubeTranscriptApi().fetch(video_id, languages=languages)
+    except (IpBlocked, RequestBlocked):
+        pass
+
+    # 방법 2: 일반 프록시 (Secrets: PROXY_URL = "http://user:pass@host:port")
+    proxy_url = _get_secret("PROXY_URL")
+    if proxy_url:
+        proxy_config = GenericProxyConfig(http_url=proxy_url, https_url=proxy_url)
+        return YouTubeTranscriptApi(proxy_config=proxy_config).fetch(video_id, languages=languages)
+
+    # 방법 3: Webshare 프록시 (Secrets: WEBSHARE_USERNAME, WEBSHARE_PASSWORD)
+    ws_user = _get_secret("WEBSHARE_USERNAME")
+    ws_pass = _get_secret("WEBSHARE_PASSWORD")
+    if ws_user and ws_pass:
+        proxy_config = WebshareProxyConfig(proxy_username=ws_user, proxy_password=ws_pass)
+        return YouTubeTranscriptApi(proxy_config=proxy_config).fetch(video_id, languages=languages)
+
+    # 방법 4: YouTube 쿠키 (Secrets: YOUTUBE_COOKIE_STRING = "key=val; key2=val2; ...")
+    cookie_str = _get_secret("YOUTUBE_COOKIE_STRING")
+    if cookie_str:
+        session = requests.Session()
+        for item in cookie_str.split(';'):
+            item = item.strip()
+            if '=' in item:
+                key, value = item.split('=', 1)
+                session.cookies.set(key.strip(), value.strip(), domain='.youtube.com')
+        return YouTubeTranscriptApi(http_client=session).fetch(video_id, languages=languages)
+
+    raise Exception(
+        "YouTube가 현재 서버 IP를 차단하고 있습니다 (클라우드 환경).\n\n"
+        "**Streamlit Cloud Secrets에 아래 중 하나를 추가하세요:**\n\n"
+        "**방법 1 — 일반 프록시:**\n"
+        "`PROXY_URL = \"http://user:pass@host:port\"`\n\n"
+        "**방법 2 — Webshare 프록시 (webshare.io 무료 10회/일):**\n"
+        "`WEBSHARE_USERNAME = \"...\"`\n`WEBSHARE_PASSWORD = \"...\"`\n\n"
+        "**방법 3 — YouTube 쿠키 (브라우저 확장 Cookie-Editor로 복사):**\n"
+        "`YOUTUBE_COOKIE_STRING = \"CONSENT=YES+...; LOGIN_INFO=...; ...\"`"
+    )
+
 # 2. Streamlit UI 설정
 st.set_page_config(page_title="유튜브 요약기", layout="wide")
 
@@ -238,7 +289,7 @@ elif st.session_state['current_tab_state'] == "🔗 유튜브 링크":
                         video_title = get_youtube_title(url)
                         
                         try:
-                            srt = YouTubeTranscriptApi().fetch(video_id, languages=['ko', 'en'])
+                            srt = fetch_transcript(video_id, languages=['ko', 'en'])
                         except Exception as e:
                             raise Exception(f"자막을 가져오지 못했습니다. 상세: {e}")
                         
