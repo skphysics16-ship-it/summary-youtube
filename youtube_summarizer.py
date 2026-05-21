@@ -66,15 +66,7 @@ def get_worksheet():
         return None
 # -------------------------------
 
-def load_history():
-    ws = get_worksheet()
-    if ws:
-        try:
-            return ws.get_all_records()
-        except Exception:
-            pass
-            
-    # 로컬 JSON Fallback (구글 시트 연동 전이거나 실패했을 때)
+def _load_local_history():
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE, "r", encoding="utf-8") as f:
@@ -83,59 +75,74 @@ def load_history():
             return []
     return []
 
+def _save_local_history(history):
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=4)
+
+def load_history():
+    local_data = _load_local_history()
+
+    ws = get_worksheet()
+    if ws:
+        try:
+            sheets_data = ws.get_all_records()
+            # 로컬에만 있는 레코드를 Sheets에서 반환한 데이터에 합산
+            sheets_ids = {str(item.get('video_id', '')) for item in sheets_data}
+            extra = [item for item in local_data if str(item.get('video_id', '')) not in sheets_ids]
+            return sheets_data + extra
+        except Exception:
+            pass
+
+    return local_data
+
 def save_to_history(video_id, title, category, summary, url):
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+    new_record = {
+        "video_id": video_id,
+        "title": title,
+        "category": category,
+        "summary": summary,
+        "url": url,
+        "date": date_str
+    }
+
+    # 항상 로컬 JSON에 저장 (Sheets 연동 여부와 무관하게 캐시)
+    local_history = _load_local_history()
+    if not any(str(item.get('video_id', '')) == str(video_id) for item in local_history):
+        local_history.append(new_record)
+        _save_local_history(local_history)
+
+    # Google Sheets에도 저장 시도
     ws = get_worksheet()
     if ws:
         try:
             records = ws.get_all_records()
             if not any(str(item.get('video_id', '')) == str(video_id) for item in records):
                 ws.append_row([video_id, title, category, summary, url, date_str])
-            return # 시트 저장 성공시 함수 종료
         except Exception:
             pass
-            
-    # 로컬 JSON Fallback
-    history = load_history()
-    if not any(item['video_id'] == video_id for item in history):
-        new_record = {
-            "video_id": video_id,
-            "title": title,
-            "category": category,
-            "summary": summary,
-            "url": url,
-            "date": date_str
-        }
-        history.append(new_record)
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=4)
 
 def update_category(video_id, new_category):
+    # 로컬 JSON 업데이트
+    local_history = _load_local_history()
+    for item in local_history:
+        if str(item.get('video_id', '')) == str(video_id):
+            item['category'] = new_category
+            break
+    _save_local_history(local_history)
+
+    # Google Sheets 업데이트 시도
     ws = get_worksheet()
     if ws:
         try:
             records = ws.get_all_records()
             for idx, item in enumerate(records):
                 if str(item.get('video_id', '')) == str(video_id):
-                    # get_all_records()는 첫 줄(헤더)을 건너뛰므로 첫 데이터는 row=2가 됨. idx가 0부터 시작하므로 +2
-                    row_index = idx + 2 
-                    # 카테고리는 3번째 열(C열)
-                    ws.update_cell(row_index, 3, new_category) 
+                    row_index = idx + 2
+                    ws.update_cell(row_index, 3, new_category)
                     break
-            return
         except Exception:
             pass
-            
-    # 로컬 JSON Fallback
-    history = load_history()
-    for item in history:
-        if item['video_id'] == video_id:
-            item['category'] = new_category
-            break
-            
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=4)
 
 def get_youtube_title(url):
     try:
